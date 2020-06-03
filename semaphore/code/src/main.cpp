@@ -9,9 +9,19 @@
 
 #define ACTIVE HIGH
 
+// real pins
 #define RED_LED D1
 #define YELLOW_LED D2
 #define GREEN_LED D3
+
+// virtual pins
+#define RED_V_LED 0
+#define YELLOW_V_LED 1
+#define GREEN_V_LED 2
+
+#define SWITCH1_V_PIN 3
+#define CHANGE_V_BUTTON 4
+#define STATE_PRINT 5
 
 typedef enum
 {
@@ -22,20 +32,21 @@ typedef enum
   runState
 } State;
 #ifdef DEBUG
-const char *StatesPrint[] = {"null", "running", "stop", "stopping"};
+const char *StatesPrint[] = {"null", "running", "stop", "stopping", "run"};
 #endif
 typedef enum
 {
   UNKNOWN,
   TIMER1,
   TIMER2,
+  CHG,
 } Event;
 #ifdef DEBUG
-const char *EventPrint[] = {"unknown", "timer1", "timer2"};
+const char *EventPrint[] = {"unknown", "timer1", "timer2", "change"};
 #endif
 
-State machine[5][3] = {};
-State currentState = stopState; //initial state
+State machine[5][4] = {};
+State currentState = stopState; //default state
 Event event = UNKNOWN;
 
 long sequence1[] = {3000, 8000, 3000, 5000};
@@ -47,10 +58,12 @@ void sendTickEvent()
 }
 
 BlynkTimer timer;
+int timerPointer;
 
 int sequence = 0;
 
-BLYNK_WRITE(V3)
+// change the sequence on switch change
+BLYNK_WRITE(SWITCH1_V_PIN_V_PIN)
 {
 
   sequence = param.asInt();
@@ -61,58 +74,31 @@ BLYNK_WRITE(V3)
 #endif
 }
 
+// make a "intantaneus" transition of the machine
+BLYNK_WRITE(CHANGE_V_BUTTON)
+{
+  event = CHG;
+}
+
+// cycle of states
+boolean redSeq[] = {!ACTIVE, ACTIVE, ACTIVE, !ACTIVE, !ACTIVE};
+boolean yellowSeq[] = {!ACTIVE, ACTIVE, !ACTIVE, ACTIVE, !ACTIVE};
+boolean greenSeq[] = {!ACTIVE, !ACTIVE, !ACTIVE, !ACTIVE, ACTIVE};
+
 void actions(State state)
 {
+  timer.deleteTimer(timerPointer);
   long *seq = sequence ? sequence1 : sequence2;
-  switch (state)
-  {
-  case runningState:
-    digitalWrite(RED_LED, ACTIVE);
-    digitalWrite(YELLOW_LED, ACTIVE);
-    digitalWrite(GREEN_LED, !ACTIVE);
 
-    Blynk.virtualWrite(0, ACTIVE * 255);
-    Blynk.virtualWrite(1, ACTIVE * 255);
-    Blynk.virtualWrite(2, !ACTIVE * 255);
+  digitalWrite(RED_LED, redSeq[state]);
+  digitalWrite(YELLOW_LED, yellowSeq[state]);
+  digitalWrite(GREEN_LED, greenSeq[state]);
 
-    timer.setTimeout(seq[0], sendTickEvent);
-    break;
-  case runState:
-    digitalWrite(RED_LED, !ACTIVE);
-    digitalWrite(YELLOW_LED, !ACTIVE);
-    digitalWrite(GREEN_LED, ACTIVE);
+  Blynk.virtualWrite(RED_V_LED, redSeq[state] * 255);
+  Blynk.virtualWrite(YELLOW_V_LED, yellowSeq[state] * 255);
+  Blynk.virtualWrite(GREEN_V_LED, greenSeq[state] * 255);
 
-    Blynk.virtualWrite(0, !ACTIVE * 255);
-    Blynk.virtualWrite(1, !ACTIVE * 255);
-    Blynk.virtualWrite(2, ACTIVE * 255);
-
-    timer.setTimeout(seq[1], sendTickEvent);
-    break;
-  case stoppingState:
-    digitalWrite(RED_LED, !ACTIVE);
-    digitalWrite(YELLOW_LED, ACTIVE);
-    digitalWrite(GREEN_LED, !ACTIVE);
-
-    Blynk.virtualWrite(0, !ACTIVE * 255);
-    Blynk.virtualWrite(1, ACTIVE * 255);
-    Blynk.virtualWrite(2, !ACTIVE * 255);
-
-    timer.setTimeout(seq[2], sendTickEvent);
-    break;
-  case stopState:
-    digitalWrite(RED_LED, ACTIVE);
-    digitalWrite(YELLOW_LED, !ACTIVE);
-    digitalWrite(GREEN_LED, !ACTIVE);
-
-    Blynk.virtualWrite(0, ACTIVE * 255);
-    Blynk.virtualWrite(1, !ACTIVE * 255);
-    Blynk.virtualWrite(2, !ACTIVE * 255);
-
-    timer.setTimeout(seq[3], sendTickEvent);
-    break;
-  default:
-    break;
-  }
+  timerPointer = timer.setTimeout(seq[state - 1], sendTickEvent);
 }
 
 void setup()
@@ -122,6 +108,8 @@ void setup()
   machine[runState][TIMER1] = stoppingState;
   machine[stoppingState][TIMER1] = stopState;
   machine[stopState][TIMER1] = runningState;
+  machine[stopState][CHG] = runningState;
+  machine[runState][CHG] = stoppingState;
 
   // pin conf
   pinMode(RED_LED, OUTPUT);
@@ -138,24 +126,29 @@ void setup()
   char ssid[] = "virusred inv";
   char pass[] = "vGvR47Gtt6BmsjAK";
 
+#ifdef DEBUG
   Serial.begin(9600);
-  Blynk.begin(auth, ssid, pass, "iot.laserud.co", 8080);
   Serial.println("Configurando Wifi...");
+  Serial.println(sizeof(State));
+#endif
+  Blynk.begin(auth, ssid, pass, "iot.laserud.co", 8080);
 
-  sendTickEvent();
+  // initalize machine
+  currentState = stopState; //initial state
+  actions(currentState);
 }
 
 void loop()
 {
 
-  // machine
+  // machine poll execution approach (most simple, better interrupts)
   if (event != UNKNOWN)
   {
 #ifdef DEBUG
     Serial.print("event: ");
-    Serial.println(event);
+    Serial.println(EventPrint[event]);
     Serial.print("currentState: ");
-    Serial.println(currentState);
+    Serial.println(StatesPrint[currentState]);
 #endif
     State newState = machine[currentState][event];
     if (newState != nullState)
@@ -163,7 +156,8 @@ void loop()
       actions(newState);
 #ifdef DEBUG
       Serial.print("newState: ");
-      Serial.println(newState);
+      Serial.println(StatesPrint[newState]);
+      Blynk.virtualWrite(STATE_PRINT, StatesPrint[newState]);
 #endif
       currentState = newState;
       event = UNKNOWN;
