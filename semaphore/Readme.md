@@ -18,7 +18,11 @@ you can try with Blynk application using the following code:
 ![QR](./qr.png)
 
 
-you can see the video [here](https://youtu.be/W7tlmPPVjuA)
+# video and animation
+
+this is the cycle of the semaphore
+![IMAGE](./animation.gif)
+and you can see the video [here](https://youtu.be/RSwETHQ1iKM)
 
 
 
