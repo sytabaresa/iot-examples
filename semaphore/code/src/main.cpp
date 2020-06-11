@@ -129,7 +129,7 @@ void setup()
 #ifdef DEBUG
   Serial.begin(9600);
   Serial.println("Configurando Wifi...");
-  Serial.println(sizeof(State));
+
 #endif
   Blynk.begin(auth, ssid, pass, "iot.laserud.co", 8080);
 
