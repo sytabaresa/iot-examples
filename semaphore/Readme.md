@@ -20,9 +20,11 @@ you can try with Blynk application using the following code:
 
 # video and animation
 
+you can see the video [here](https://youtu.be/RSwETHQ1iKM) or see the animation:
+
 this is the cycle of the semaphore
 ![IMAGE](./animation.gif)
-and you can see the video [here](https://youtu.be/RSwETHQ1iKM)
+
 
 
 
